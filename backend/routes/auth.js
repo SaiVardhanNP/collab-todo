@@ -1,89 +1,71 @@
-const bcrypt=require("bcryptjs");
-const jwt=require("jsonwebtoken");
-const express=require("express");
-const { UserModel } = require("../models/User");
-const User = require("../models/User");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const express = require("express");
+const { UserModel } = require("../models/User"); // Correct import
 
+const router = express.Router();
 
-const router=new express.Router();
+router.post("/register", async (req, res) => {
+    const { username, password } = req.body;
 
+    try {
+        let existingUser = await UserModel.findOne({ username });
 
-router.post("/register",async (req,res)=>{
-    const {username,password}=req.body;
-
-    try{
-        let user=await UserModel.find({username});
-
-        if(user){
-            return res.status(400).json({
-                "msg":"User already exists!"
-            })
+        if (existingUser) {
+            return res.status(400).json({ msg: "User already exists!" });
         }
 
-        user = new User({username,password});
+        const hashedPassword = await bcrypt.hash(password, 5);
 
-        user.password=await bcrypt.hash(password,5);
+        const newUser = new UserModel({
+            username,
+            password: hashedPassword
+        });
 
-        await user.save();
+        await newUser.save();
 
-        res.status(201).json({
-            msg:"User registered successfully!"
-        })
+        res.status(201).json({ msg: "User registered successfully!" });
+    } catch (e) {
+        console.error(e.message);
+        res.status(500).json({ msg: "Server Error" });
     }
-    catch(e){
-        console.log(e.message);
-        res.json({
-            msg:"Server Error"
-        })
-    }
-})
+});
 
+router.post("/signin", async (req, res) => {
+    const { username, password } = req.body;
 
-router.post("/signin",async(req,res)=>{
-    const {username,password}=req.body;
+    try {
+        const user = await UserModel.findOne({ username });
 
-
-    try{
-        const user=await UserModel.find({username});
-
-        if(!user){
-            res.status(400).json({
-                msg:"User not found!"
-            })
-            return;
+        if (!user) {
+            return res.status(400).json({ msg: "User not found!" });
         }
 
-        const isMatch=await bcrypt.verfiy(password,user.password);
+        const isMatch = await bcrypt.compare(password, user.password);
 
-        if(!isMatch){
-            return res.status(400).json({
-                "msg":"Invalid Password!"
-            })
+        if (!isMatch) {
+            return res.status(400).json({ msg: "Invalid Password!" });
         }
 
-        const payload={
-            user:{
-                id:user.id,
+        const payload = {
+            user: {
+                id: user._id,
             }
         };
 
         jwt.sign(
             payload,
             process.env.JWT_SECRET_KEY,
-            {expiresIn:"7d"},
-            (err,token)=>{
-                if(err) throw err;
-                res.json({token});
+            { expiresIn: "7d" },
+            (err, token) => {
+                if (err) throw err;
+                res.json({ token });
             }
-        )
+        );
+    } catch (e) {
+        console.error(e.message);
+        res.status(500).json({ msg: "Server Error" });
     }
-    catch(e){
-        console.log(err.message);
-        res.status(500).send("Server Error");
-    }
-})
+});
 
-
-module.exports={
-    router:router
-}
+module.exports = router;
