@@ -1,89 +1,90 @@
 const express = require('express');
 const router = express.Router();
 const auth = require('../middleware/auth');
-const Task = require('../models/Task');
-const User = require('../models/User');
+const { TaskModel } = require("../models/Task");
+const { UserModel } = require("../models/User");
 
 const FORBIDDEN_TITLES = ['Todo', 'In Progress', 'Done'];
 
-module.exports = function(io) {
-  // ## CREATE A NEW TASK
+module.exports = function (io) {
   router.post('/', auth, async (req, res) => {
-    // ... (validation logic remains the same)
     const { title, description, priority } = req.body;
     try {
-        if (FORBIDDEN_TITLES.map(t => t.toLowerCase()).includes(title.toLowerCase())) {
-            return res.status(400).json({ msg: 'Task title cannot be the same as a column name.' });
-        }
-        const existingTask = await Task.findOne({ title });
-        if (existingTask) {
-            return res.status(400).json({ msg: 'A task with this title already exists.' });
-        }
-        
-        const newTask = new Task({ title, description, priority });
-        const task = await newTask.save();
-        
-        // ✨ Emit event to all connected clients
-        io.emit('task:created', task);
-        
-        res.status(201).json(task);
+      if (!title || !priority) {
+        return res.status(400).json({ msg: 'Title and priority are required.' });
+      }
+
+      if (FORBIDDEN_TITLES.map(t => t.toLowerCase()).includes(title.toLowerCase())) {
+        return res.status(400).json({ msg: 'Task title cannot match column name.' });
+      }
+
+      const existingTask = await TaskModel.findOne({ title });
+      if (existingTask) {
+        return res.status(400).json({ msg: 'A task with this title already exists.' });
+      }
+
+      const newTask = new TaskModel({
+        title,
+        description,
+        priority,
+        assignedUser: req.user.id 
+      });
+
+      const task = await newTask.save();
+      io.emit('task:created', task);
+      res.status(201).json(task);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+      console.error(err.message);
+      res.status(500).json({ msg: 'Server Error' });
     }
   });
 
-  // ## GET ALL TASKS
   router.get('/', auth, async (req, res) => {
     try {
-        const tasks = await Task.find().populate('assignedUser', 'username').sort({ createdAt: -1 });
-        res.json(tasks);
+      const tasks = await TaskModel.find()
+        .populate('assignedUser', 'username')
+        .sort({ createdAt: -1 });
+      res.json(tasks);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+      console.error(err.message);
+      res.status(500).json({ msg: 'Server Error' });
     }
   });
 
-  // ## UPDATE A TASK
   router.put('/:id', auth, async (req, res) => {
     try {
-        // Find and update, and get the new document back
-        const updatedTask = await Task.findByIdAndUpdate(
-            req.params.id, 
-            { $set: req.body }, 
-            { new: true }
-        ).populate('assignedUser', 'username');
+      const updatedTask = await TaskModel.findByIdAndUpdate(
+        req.params.id,
+        { $set: req.body },
+        { new: true }
+      ).populate('assignedUser', 'username');
 
-        if (!updatedTask) {
-            return res.status(404).json({ msg: 'Task not found' });
-        }
+      if (!updatedTask) {
+        return res.status(404).json({ msg: 'Task not found' });
+      }
 
-        // ✨ Emit event with the updated task data
-        io.emit('task:updated', updatedTask);
-        
-        res.json(updatedTask);
+      io.emit('task:updated', updatedTask);
+      res.json(updatedTask);
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+      console.error(err.message);
+      res.status(500).json({ msg: 'Server Error' });
     }
   });
 
-  // ## DELETE A TASK
   router.delete('/:id', auth, async (req, res) => {
     try {
-        const task = await Task.findById(req.params.id);
-        if (!task) {
-            return res.status(404).json({ msg: 'Task not found' });
-        }
-        await task.deleteOne();
+      const task = await TaskModel.findById(req.params.id);
+      if (!task) {
+        return res.status(404).json({ msg: 'Task not found' });
+      }
 
-        // ✨ Emit event with the ID of the deleted task
-        io.emit('task:deleted', { id: req.params.id });
+      await task.deleteOne();
+      io.emit('task:deleted', { id: req.params.id });
 
-        res.json({ msg: 'Task removed' });
+      res.json({ msg: 'Task removed' });
     } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
+      console.error(err.message);
+      res.status(500).json({ msg: 'Server Error' });
     }
   });
 
