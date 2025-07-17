@@ -163,3 +163,33 @@
   overflow-x: auto;
   flex-grow: 1;
 }
+
+@media (max-width: 1024px) {
+  .board-layout {
+    flex-direction: column;
+  }
+
+  .board-main-content {
+    overflow-y: auto; 
+  }
+}
+
+@media (max-width: 768px) {
+  .board-container {
+    flex-direction: column;
+    align-items: stretch; 
+    padding: 0 1rem 1rem 1rem;
+  }
+
+  .board-column {
+    min-width: 100%;
+    width: 100%;
+  }
+
+  .board-header {
+    padding: 1rem;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+  }
+}

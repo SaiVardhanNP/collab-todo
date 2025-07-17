@@ -3,7 +3,8 @@ import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import Navbar from '../components/Navbar';
 import TaskCard from '../components/TaskCard';
 import TaskModal from '../components/TaskModal';
-import ActivityLog from '../components/ActivityLog'; 
+import ConflictModal from '../components/ConflictModal';
+import ActivityLog from '../components/ActivityLog';
 import { apiClient } from '../context/AuthContext';
 import { socket } from '../services/socket';
 import '../styles/board.css';
@@ -13,6 +14,8 @@ const BoardPage = () => {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
+  const [isConflictModalOpen, setIsConflictModalOpen] = useState(false);
+  const [conflictData, setConflictData] = useState(null);
 
   useEffect(() => {
     const fetchTasks = async () => {
@@ -58,8 +61,35 @@ const BoardPage = () => {
         await apiClient.post('/tasks', taskData);
       }
     } catch (error) {
-      console.error("Failed to save task", error);
-      alert("Error: " + (error.response?.data?.msg || "Could not save task."));
+      if (error.response && error.response.status === 409) {
+        setConflictData({
+          clientTask: taskData,
+          serverTask: error.response.data.serverTask,
+        });
+        setIsConflictModalOpen(true);
+      } else {
+        console.error("Failed to save task", error);
+        alert("Error: " + (error.response?.data?.msg || "Could not save task."));
+      }
+    }
+  };
+
+  const handleCloseConflictModal = () => {
+    setIsConflictModalOpen(false);
+    setConflictData(null);
+  };
+
+  const handleOverwrite = async (clientTask, latestVersion) => {
+    try {
+      await apiClient.put(`/tasks/${clientTask._id}`, {
+        ...clientTask,
+        version: latestVersion,
+      });
+      handleCloseConflictModal();
+    } catch (error) {
+      console.error("Failed to overwrite task", error);
+      alert("Overwrite failed. Please try again.");
+      handleCloseConflictModal();
     }
   };
   
@@ -83,7 +113,7 @@ const BoardPage = () => {
         t._id === draggableId ? { ...t, status: destination.droppableId } : t
       );
       setTasks(updatedTasks);
-      apiClient.put(`/tasks/${draggableId}`, { status: destination.droppableId })
+      apiClient.put(`/tasks/${draggableId}`, { status: destination.droppableId, version: task.version })
         .catch(err => {
           console.error("Failed to update task status", err);
           setTasks(tasks);
@@ -106,6 +136,14 @@ const BoardPage = () => {
           onClose={handleCloseModal} 
           onSave={handleSaveTask}
           onSmartAssign={handleSmartAssign}
+        />
+      )}
+      {isConflictModalOpen && (
+        <ConflictModal
+          clientTask={conflictData.clientTask}
+          serverTask={conflictData.serverTask}
+          onCancel={handleCloseConflictModal}
+          onOverwrite={handleOverwrite}
         />
       )}
       <div className="board-layout">

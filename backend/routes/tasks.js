@@ -88,5 +88,87 @@ module.exports = function (io) {
     }
   });
 
+  router.post('/:id/smart-assign', auth, async (req, res) => {
+    try {
+        const allUsers = await User.find({}, '_id');
+        if (!allUsers.length) {
+            return res.status(404).json({ msg: 'No users found in the system.' });
+        }
+
+        const taskCounts = await Task.aggregate([
+            { $match: { status: { $in: ['Todo', 'In Progress'] }, assignedUser: { $ne: null } } },
+            { $group: { _id: '$assignedUser', count: { $sum: 1 } } }
+        ]);
+
+        const userTaskCountMap = new Map(
+            taskCounts.map(item => [item._id.toString(), item.count])
+        );
+
+        let targetUser = null;
+        let minTasks = Infinity;
+
+        for (const user of allUsers) {
+            const count = userTaskCountMap.get(user._id.toString()) || 0;
+            if (count < minTasks) {
+                minTasks = count;
+                targetUser = user;
+            }
+        }
+        
+        const updatedTask = await Task.findByIdAndUpdate(
+            req.params.id,
+            { $set: { assignedUser: targetUser._id } },
+            { new: true }
+        ).populate('assignedUser', 'username'); // Populate to send user info back
+
+        if (!updatedTask) {
+            return res.status(404).json({ msg: 'Task not found' });
+        }
+
+        io.emit('task:updated', updatedTask);
+        res.json(updatedTask);
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+router.put('/:id', auth, async (req, res) => {
+    const { title, description, priority, status, version } = req.body;
+
+    try {
+        const task = await Task.findById(req.params.id);
+
+        if (!task) {
+            return res.status(404).json({ msg: 'Task not found' });
+        }
+
+        if (version !== undefined && task.version !== version) {
+            return res.status(409).json({
+                msg: 'Conflict detected! This task has been updated by someone else.',
+                serverTask: await task.populate('assignedUser', 'username') // Send the current task data back
+            });
+        }
+
+        task.title = title !== undefined ? title : task.title;
+        task.description = description !== undefined ? description : task.description;
+        task.priority = priority !== undefined ? priority : task.priority;
+        task.status = status !== undefined ? status : task.status;
+
+        const updatedTask = await task.save(); // Mongoose automatically increments the version on save
+        const populatedTask = await updatedTask.populate('assignedUser', 'username');
+
+        io.emit('task:updated', populatedTask);
+        logAction(io, req.user.id, `edited task "${populatedTask.title}"`);
+
+        res.json(populatedTask);
+
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
   return router;
 };

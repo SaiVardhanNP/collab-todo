@@ -29,7 +29,9 @@ io.on('connection', (socket) => {
 });
 
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/tasks', require('./routes/tasks')(io)); // Pass io to the tasks routes
+app.use('/api/tasks', require('./routes/tasks')(io));
+app.use('/api/logs', require('./routes/logs'));
+
 
 app.get('/', (req, res) => {
   res.send('<h1>To-Do Board API is running!</h1>');
