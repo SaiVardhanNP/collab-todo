@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { apiClient } from '../context/AuthContext';
-import { socket } from '../services/socket';
-import '../styles/activity-log.css';
+import { apiClient } from '/src/context/AuthContext.jsx'; // Absolute path
+import { socket } from '/src/services/socket.js'; // Absolute path
+import '/src/styles/activity-log.css'; // Absolute path
 
 const ActivityLog = () => {
   const [logs, setLogs] = useState([]);

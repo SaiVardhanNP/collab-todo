@@ -1,5 +1,5 @@
 import React from 'react';
-import '../styles/conflict-modal.css';
+import '/src/styles/conflict-modal.css'; // Absolute path
 
 const ConflictModal = ({ clientTask, serverTask, onOverwrite, onCancel }) => {
   return (

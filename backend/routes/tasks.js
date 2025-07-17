@@ -1,174 +1,110 @@
 const express = require('express');
 const router = express.Router();
-const auth = require('../middleware/auth');
-const { TaskModel } = require("../models/Task");
-const { UserModel } = require("../models/User");
+const auth = require('../middleware/auth.js');
+const Task = require('../models/Task.js');
+const User = require('../models/User.js');
+const logAction = require('../utils/logAction.js');
 
-const FORBIDDEN_TITLES = ['Todo', 'In Progress', 'Done'];
+router.get('/', auth, async (req, res) => {
+  try {
+    const tasks = await Task.find().populate('assignedUser', 'username').sort({ createdAt: -1 });
+    res.json(tasks);
+  } catch (err) {
+    console.error("ERROR in GET /tasks:", err);
+    res.status(500).send('Server Error');
+  }
+});
 
-module.exports = function (io) {
-  router.post('/', auth, async (req, res) => {
+router.post('/', auth, async (req, res) => {
+  if (!req.user || !req.user.id) return res.status(401).json({ msg: 'User not authorized' });
+  try {
+    const io = req.app.get('socketio');
     const { title, description, priority } = req.body;
-    try {
-      if (!title || !priority) {
-        return res.status(400).json({ msg: 'Title and priority are required.' });
-      }
-
-      if (FORBIDDEN_TITLES.map(t => t.toLowerCase()).includes(title.toLowerCase())) {
-        return res.status(400).json({ msg: 'Task title cannot match column name.' });
-      }
-
-      const existingTask = await TaskModel.findOne({ title });
-      if (existingTask) {
-        return res.status(400).json({ msg: 'A task with this title already exists.' });
-      }
-
-      const newTask = new TaskModel({
-        title,
-        description,
-        priority,
-        assignedUser: req.user.id 
-      });
-
-      const task = await newTask.save();
-      io.emit('task:created', task);
-      res.status(201).json(task);
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).json({ msg: 'Server Error' });
-    }
-  });
-
-  router.get('/', auth, async (req, res) => {
-    try {
-      const tasks = await TaskModel.find()
-        .populate('assignedUser', 'username')
-        .sort({ createdAt: -1 });
-      res.json(tasks);
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).json({ msg: 'Server Error' });
-    }
-  });
-
-  router.put('/:id', auth, async (req, res) => {
-    try {
-      const updatedTask = await TaskModel.findByIdAndUpdate(
-        req.params.id,
-        { $set: req.body },
-        { new: true }
-      ).populate('assignedUser', 'username');
-
-      if (!updatedTask) {
-        return res.status(404).json({ msg: 'Task not found' });
-      }
-
-      io.emit('task:updated', updatedTask);
-      res.json(updatedTask);
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).json({ msg: 'Server Error' });
-    }
-  });
-
-  router.delete('/:id', auth, async (req, res) => {
-    try {
-      const task = await TaskModel.findById(req.params.id);
-      if (!task) {
-        return res.status(404).json({ msg: 'Task not found' });
-      }
-
-      await task.deleteOne();
-      io.emit('task:deleted', { id: req.params.id });
-
-      res.json({ msg: 'Task removed' });
-    } catch (err) {
-      console.error(err.message);
-      res.status(500).json({ msg: 'Server Error' });
-    }
-  });
-
-  router.post('/:id/smart-assign', auth, async (req, res) => {
-    try {
-        const allUsers = await User.find({}, '_id');
-        if (!allUsers.length) {
-            return res.status(404).json({ msg: 'No users found in the system.' });
-        }
-
-        const taskCounts = await Task.aggregate([
-            { $match: { status: { $in: ['Todo', 'In Progress'] }, assignedUser: { $ne: null } } },
-            { $group: { _id: '$assignedUser', count: { $sum: 1 } } }
-        ]);
-
-        const userTaskCountMap = new Map(
-            taskCounts.map(item => [item._id.toString(), item.count])
-        );
-
-        let targetUser = null;
-        let minTasks = Infinity;
-
-        for (const user of allUsers) {
-            const count = userTaskCountMap.get(user._id.toString()) || 0;
-            if (count < minTasks) {
-                minTasks = count;
-                targetUser = user;
-            }
-        }
-        
-        const updatedTask = await Task.findByIdAndUpdate(
-            req.params.id,
-            { $set: { assignedUser: targetUser._id } },
-            { new: true }
-        ).populate('assignedUser', 'username'); // Populate to send user info back
-
-        if (!updatedTask) {
-            return res.status(404).json({ msg: 'Task not found' });
-        }
-
-        io.emit('task:updated', updatedTask);
-        res.json(updatedTask);
-
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).send('Server Error');
-    }
+    const newTask = new Task({ title, description, priority });
+    const task = await newTask.save();
+    const populatedTask = await Task.findById(task._id).populate('assignedUser', 'username');
+    io.emit('task:created', populatedTask);
+    logAction(io, req.user.id, `created task "${task.title}"`);
+    res.status(201).json(populatedTask);
+  } catch (err) {
+    console.error("ERROR in POST /tasks:", err);
+    res.status(500).send('Server Error');
+  }
 });
 
 router.put('/:id', auth, async (req, res) => {
-    const { title, description, priority, status, version } = req.body;
+  if (!req.user || !req.user.id) return res.status(401).json({ msg: 'User not authorized' });
+  
+  try {
+    const io = req.app.get('socketio');
+    const { version, ...updateData } = req.body;
+    const oldStatus = (await Task.findById(req.params.id, 'status')).status;
 
+    const updatedTask = await Task.findOneAndUpdate(
+      { _id: req.params.id, version: version },
+      { $set: updateData, $inc: { version: 1 } },
+      { new: true }
+    ).populate('assignedUser', 'username');
+
+    if (!updatedTask) {
+      const serverTask = await Task.findById(req.params.id).populate('assignedUser', 'username');
+      return res.status(409).json({ msg: 'Conflict detected!', serverTask: serverTask });
+    }
+
+    io.emit('task:updated', updatedTask);
+    
+    if (updateData.status && updateData.status !== oldStatus) {
+      logAction(io, req.user.id, `moved task "${updatedTask.title}" to ${updateData.status}`);
+    } else {
+      logAction(io, req.user.id, `edited task "${updatedTask.title}"`);
+    }
+    
+    res.json(updatedTask);
+  } catch (err) {
+    console.error("ERROR in PUT /tasks/:id:", err);
+    res.status(500).send('Server Error');
+  }
+});
+
+router.delete('/:id', auth, async (req, res) => {
+    if (!req.user || !req.user.id) return res.status(401).json({ msg: 'User not authorized' });
     try {
-        const task = await Task.findById(req.params.id);
-
-        if (!task) {
-            return res.status(404).json({ msg: 'Task not found' });
-        }
-
-        if (version !== undefined && task.version !== version) {
-            return res.status(409).json({
-                msg: 'Conflict detected! This task has been updated by someone else.',
-                serverTask: await task.populate('assignedUser', 'username') // Send the current task data back
-            });
-        }
-
-        task.title = title !== undefined ? title : task.title;
-        task.description = description !== undefined ? description : task.description;
-        task.priority = priority !== undefined ? priority : task.priority;
-        task.status = status !== undefined ? status : task.status;
-
-        const updatedTask = await task.save(); // Mongoose automatically increments the version on save
-        const populatedTask = await updatedTask.populate('assignedUser', 'username');
-
-        io.emit('task:updated', populatedTask);
-        logAction(io, req.user.id, `edited task "${populatedTask.title}"`);
-
-        res.json(populatedTask);
-
+        const io = req.app.get('socketio');
+        const task = await Task.findByIdAndDelete(req.params.id);
+        if (!task) return res.status(404).json({ msg: 'Task not found' });
+        io.emit('task:deleted', { id: req.params.id });
+        logAction(io, req.user.id, `deleted task "${task.title}"`);
+        res.json({ msg: 'Task removed' });
     } catch (err) {
-        console.error(err.message);
         res.status(500).send('Server Error');
     }
 });
 
-  return router;
-};
+router.post('/:id/smart-assign', auth, async (req, res) => {
+  if (!req.user || !req.user.id) return res.status(401).json({ msg: 'User not authorized' });
+  try {
+    const io = req.app.get('socketio');
+    const allUsers = await User.find({}, '_id');
+    if (!allUsers.length) return res.status(404).json({ msg: 'No users found.' });
+    const taskCounts = await Task.aggregate([ { $match: { status: { $in: ['Todo', 'In Progress'] }, assignedUser: { $ne: null } } }, { $group: { _id: '$assignedUser', count: { $sum: 1 } } } ]);
+    const userTaskCountMap = new Map(taskCounts.map(item => [item._id.toString(), item.count]));
+    let targetUser = null;
+    let minTasks = Infinity;
+    for (const user of allUsers) {
+      const count = userTaskCountMap.get(user._id.toString()) || 0;
+      if (count < minTasks) {
+        minTasks = count;
+        targetUser = user;
+      }
+    }
+    const updatedTask = await Task.findByIdAndUpdate( req.params.id, { $set: { assignedUser: targetUser._id }, $inc: { version: 1 } }, { new: true } ).populate('assignedUser', 'username');
+    if (!updatedTask) return res.status(404).json({ msg: 'Task not found' });
+    io.emit('task:updated', updatedTask);
+    logAction(io, req.user.id, `smart-assigned task "${updatedTask.title}" to ${updatedTask.assignedUser.username}`);
+    res.json(updatedTask);
+  } catch (err) {
+    res.status(500).send('Server Error');
+  }
+});
+
+module.exports = router;

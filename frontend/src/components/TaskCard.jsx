@@ -1,5 +1,5 @@
 import React from 'react';
-import '../styles/board.css';
+import '/src/styles/board.css'; // Absolute path
 
 const priorityColors = {
   High: 'priority-high',

@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
-import '../styles/modal.css';
+import '/src/styles/modal.css'; // Absolute path
 
 const TaskModal = ({ task, onClose, onSave, onSmartAssign }) => {
   const [title, setTitle] = useState(task ? task.title : '');
   const [description, setDescription] = useState(task ? task.description : '');
   const [priority, setPriority] = useState(task ? task.priority : 'Medium');
 
-  const handleSubmit = (e) => {
+ // In src/components/TaskModal.jsx
+
+const handleSubmit = (e) => {
     e.preventDefault();
     onSave({ ...task, title, description, priority });
-    onClose();
   };
 
   const handleSmartAssignClick = () => {

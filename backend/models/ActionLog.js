@@ -1,27 +1,20 @@
-const mongoose = require("mongoose");
+const mongoose = require('mongoose');
 
-const ActionSchema = new mongoose.Schema(
-  {
-    user: {
-      type: mongoose.Types.ObjectId,
-      ref: "User",
-      required: true,
-    },
-    action: {
-      type: String,
-      required: true,
-    },
+const ActionLogSchema = new mongoose.Schema({
+  user: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User',
+    required: true
   },
-  {
-    timestamps: {
-      type: Date,
-      default: Date.now,
-    },
-  }
-);
+  action: { 
+    type: String, 
+    required: true 
+  },
+  timestamp: { 
+    type: Date, 
+    default: Date.now 
+  },
+});
 
-const Action = mongoose.model("Action", ActionSchema);
-
-module.exports = {
-  Action: Action,
-};
+// This line is the fix.
+module.exports = mongoose.model('ActionLog', ActionLogSchema);

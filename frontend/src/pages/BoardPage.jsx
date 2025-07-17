@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import Navbar from '../components/Navbar';
-import TaskCard from '../components/TaskCard';
-import TaskModal from '../components/TaskModal';
-import ConflictModal from '../components/ConflictModal';
-import ActivityLog from '../components/ActivityLog';
-import { apiClient } from '../context/AuthContext';
-import { socket } from '../services/socket';
-import '../styles/board.css';
+import Navbar from '/src/components/Navbar.jsx';
+import TaskCard from '/src/components/TaskCard.jsx';
+import TaskModal from '/src/components/TaskModal.jsx';
+import ConflictModal from '/src/components/ConflictModal.jsx';
+import ActivityLog from '/src/components/ActivityLog.jsx';
+import { apiClient } from '/src/context/AuthContext.jsx';
+import { socket } from '/src/services/socket.js';
+import '/src/styles/board.css';
 
 const BoardPage = () => {
   const [tasks, setTasks] = useState([]);
@@ -23,25 +23,67 @@ const BoardPage = () => {
         setLoading(true);
         const res = await apiClient.get('/tasks');
         setTasks(res.data);
-      } catch (err) { console.error("Failed to fetch tasks", err); }
-      finally { setLoading(false); }
+      } catch (err) {
+        console.error("Failed to fetch tasks", err);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchTasks();
   }, []);
 
   useEffect(() => {
-    const handleTaskCreated = (newTask) => setTasks(prev => [...prev, newTask]);
-    const handleTaskUpdated = (updatedTask) => setTasks(prev => prev.map(t => t._id === updatedTask._id ? updatedTask : t));
-    const handleTaskDeleted = ({ id }) => setTasks(prev => prev.filter(t => t._id !== id));
+    const handleTaskCreated = (newTask) => {
+      setTasks(prevTasks => [...prevTasks, newTask]);
+    };
+
+    const handleTaskUpdated = (updatedTask) => {
+      setTasks(prevTasks =>
+        prevTasks.map(task =>
+          task._id === updatedTask._id ? updatedTask : task
+        )
+      );
+    };
+
+    const handleTaskDeleted = ({ id }) => {
+      setTasks(prevTasks => prevTasks.filter(task => task._id !== id));
+    };
+
     socket.on('task:created', handleTaskCreated);
     socket.on('task:updated', handleTaskUpdated);
     socket.on('task:deleted', handleTaskDeleted);
+
     return () => {
       socket.off('task:created', handleTaskCreated);
       socket.off('task:updated', handleTaskUpdated);
       socket.off('task:deleted', handleTaskDeleted);
     };
-  }, []);
+  }, [socket]);
+
+  const onDragEnd = async (result) => {
+    const { destination, source, draggableId } = result;
+    if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
+      return;
+    }
+
+    const taskToMove = tasks.find(t => t._id === draggableId);
+    if (!taskToMove) return;
+
+    try {
+      await apiClient.put(`/tasks/${draggableId}`, {
+        status: destination.droppableId,
+        version: taskToMove.version,
+      });
+    } catch (error) {
+      console.error("Failed to move task:", error);
+      if (error.response && error.response.status === 409) {
+        alert("Could not move task. It has been modified by someone else. The board will now refresh.");
+      } else {
+        alert("A network error occurred while moving the task.");
+      }
+      apiClient.get('/tasks').then(res => setTasks(res.data));
+    }
+  };
 
   const handleOpenModal = (task = null) => {
     setSelectedTask(task);
@@ -55,13 +97,19 @@ const BoardPage = () => {
 
   const handleSaveTask = async (taskData) => {
     try {
-      if (taskData._id) {
-        await apiClient.put(`/tasks/${taskData._id}`, taskData);
+      const taskToSave = {
+        ...taskData,
+        version: selectedTask ? selectedTask.version : undefined,
+      };
+      if (taskToSave._id) {
+        await apiClient.put(`/tasks/${taskToSave._id}`, taskToSave);
       } else {
-        await apiClient.post('/tasks', taskData);
+        await apiClient.post('/tasks', taskToSave);
       }
+      handleCloseModal();
     } catch (error) {
       if (error.response && error.response.status === 409) {
+        setIsModalOpen(false);
         setConflictData({
           clientTask: taskData,
           serverTask: error.response.data.serverTask,
@@ -102,25 +150,6 @@ const BoardPage = () => {
     }
   };
 
-  const onDragEnd = (result) => {
-    const { destination, source, draggableId } = result;
-    if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
-      return;
-    }
-    const task = tasks.find(t => t._id === draggableId);
-    if (task.status !== destination.droppableId) {
-      const updatedTasks = tasks.map(t =>
-        t._id === draggableId ? { ...t, status: destination.droppableId } : t
-      );
-      setTasks(updatedTasks);
-      apiClient.put(`/tasks/${draggableId}`, { status: destination.droppableId, version: task.version })
-        .catch(err => {
-          console.error("Failed to update task status", err);
-          setTasks(tasks);
-        });
-    }
-  };
-
   const columns = {
     Todo: tasks.filter(task => task.status === 'Todo'),
     'In Progress': tasks.filter(task => task.status === 'In Progress'),
@@ -129,7 +158,6 @@ const BoardPage = () => {
 
   return (
     <div className="board-page-container">
-      <Navbar />
       {isModalOpen && (
         <TaskModal 
           task={selectedTask} 
