@@ -1,15 +1,14 @@
-// ... (imports and other functions remain the same) ...
 import React, { useState, useEffect } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import Navbar from '../components/Navbar';
 import TaskCard from '../components/TaskCard';
 import TaskModal from '../components/TaskModal';
+import ActivityLog from '../components/ActivityLog'; 
 import { apiClient } from '../context/AuthContext';
 import { socket } from '../services/socket';
 import '../styles/board.css';
 
 const BoardPage = () => {
-  // ... (all state and useEffect hooks remain the same) ...
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -64,7 +63,6 @@ const BoardPage = () => {
     }
   };
   
-  // New handler function for Smart Assign
   const handleSmartAssign = async (taskId) => {
     try {
       await apiClient.post(`/tasks/${taskId}/smart-assign`);
@@ -74,7 +72,6 @@ const BoardPage = () => {
     }
   };
 
-  // ... (onDragEnd and columns logic remain the same) ...
   const onDragEnd = (result) => {
     const { destination, source, draggableId } = result;
     if (!destination || (destination.droppableId === source.droppableId && destination.index === source.index)) {
@@ -108,51 +105,55 @@ const BoardPage = () => {
           task={selectedTask} 
           onClose={handleCloseModal} 
           onSave={handleSaveTask}
-          onSmartAssign={handleSmartAssign} // Pass the new handler down
+          onSmartAssign={handleSmartAssign}
         />
       )}
-      <header className="board-header">
-        <h2>Project Board</h2>
-        <button onClick={() => handleOpenModal()} className="add-task-btn">
-          + Add Task
-        </button>
-      </header>
-      {/* ... (DragDropContext and mapping logic remains the same) ... */}
-      <DragDropContext onDragEnd={onDragEnd}>
-        <main className="board-container">
-          {loading ? <p>Loading...</p> : Object.entries(columns).map(([status, tasksInColumn]) => (
-            <Droppable key={status} droppableId={status}>
-              {(provided, snapshot) => (
-                <div
-                  ref={provided.innerRef}
-                  {...provided.droppableProps}
-                  className={`board-column ${snapshot.isDraggingOver ? 'dragging-over' : ''}`}
-                >
-                  <h2 className="column-title">{status}</h2>
-                  <div className="column-tasks">
-                    {tasksInColumn.map((task, index) => (
-                      <Draggable key={task._id} draggableId={task._id} index={index}>
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`task-card-wrapper ${snapshot.isDragging ? 'is-dragging' : ''}`}
-                            onClick={() => handleOpenModal(task)}
-                          >
-                            <TaskCard task={task} />
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
-                    {provided.placeholder}
-                  </div>
-                </div>
-              )}
-            </Droppable>
-          ))}
-        </main>
-      </DragDropContext>
+      <div className="board-layout">
+        <div className="board-main-content">
+          <header className="board-header">
+            <h2>Project Board</h2>
+            <button onClick={() => handleOpenModal()} className="add-task-btn">
+              + Add Task
+            </button>
+          </header>
+          <DragDropContext onDragEnd={onDragEnd}>
+            <main className="board-container">
+              {loading ? <p>Loading...</p> : Object.entries(columns).map(([status, tasksInColumn]) => (
+                <Droppable key={status} droppableId={status}>
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.droppableProps}
+                      className={`board-column ${snapshot.isDraggingOver ? 'dragging-over' : ''}`}
+                    >
+                      <h2 className="column-title">{status}</h2>
+                      <div className="column-tasks">
+                        {tasksInColumn.map((task, index) => (
+                          <Draggable key={task._id} draggableId={task._id} index={index}>
+                            {(provided, snapshot) => (
+                              <div
+                                ref={provided.innerRef}
+                                {...provided.draggableProps}
+                                {...provided.dragHandleProps}
+                                className={`task-card-wrapper ${snapshot.isDragging ? 'is-dragging' : ''}`}
+                                onClick={() => handleOpenModal(task)}
+                              >
+                                <TaskCard task={task} />
+                              </div>
+                            )}
+                          </Draggable>
+                        ))}
+                        {provided.placeholder}
+                      </div>
+                    </div>
+                  )}
+                </Droppable>
+              ))}
+            </main>
+          </DragDropContext>
+        </div>
+        <ActivityLog />
+      </div>
     </div>
   );
 };
