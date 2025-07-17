@@ -4,7 +4,7 @@ import axios from 'axios';
 const AuthContext = createContext(null);
 
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3000/api',
+  baseURL: 'https://collab-todo-1.onrender.com/api',
 });
 
 // This is the most robust way to handle auth tokens.
