@@ -92,3 +92,53 @@
 .priority-low {
     background-color: #61bd4f;
 }
+
+
+.column-tasks {
+  transition: background-color 0.2s ease;
+}
+
+.board-column.dragging-over .column-tasks {
+  background-color: #e0e0e0;
+}
+
+.task-card-wrapper {
+    margin-bottom: 0.75rem;
+}
+
+.task-card-wrapper.is-dragging .task-card {
+  transform: rotate(3deg);
+  box-shadow: 0 8px 16px rgba(9, 30, 66, 0.3);
+}
+
+.task-card {
+  transition: box-shadow 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.board-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.board-header h2 {
+  font-size: 1.8rem;
+  font-weight: 600;
+}
+
+.add-task-btn {
+  padding: 0.6rem 1.2rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: white;
+  background-color: var(--primary-blue);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.add-task-btn:hover {
+  background-color: #026aa7;
+}
