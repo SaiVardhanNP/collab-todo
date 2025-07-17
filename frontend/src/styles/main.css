@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-main: #f4f5f7;
+  --bg-column: #ebecf0;
+  --bg-card: #ffffff;
+  --text-dark: #172b4d;
+  --text-light: #5e6c84;
+  --primary-blue: #0079bf;
+  --danger-red: #d9534f;
+  --border-radius: 8px;
+  --card-shadow: 0 1px 1px rgba(9, 30, 66, 0.25);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Poppins', sans-serif;
+  background-color: var(--bg-main);
+  color: var(--text-dark);
+  line-height: 1.5;
+}
+
+button, input, select, textarea {
+  font-family: inherit;
+}
